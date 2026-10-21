@@ -44,3 +44,22 @@ Both baseline CNN and ConvNeXt will use the same new split.
 The AI-assisted data preparation script was tested locally
 against the complete downloaded image dataset.
 
+
+## PyTorch Data Pipeline Verification
+
+- PyTorch: 2.8.0+cu126
+- TorchVision: 0.23.0+cu126
+- GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+- Dataset: 30,520 grayscale MRI images
+- Training: 21,360 images from 476 patients
+- Validation: 4,700 images from 102 patients
+- Test: 4,460 images from 102 patients
+- Model input: 3 x 224 x 224
+- Batch size tested: 8
+- Patient overlap between splits: 0
+- All three DataLoaders passed the smoke test.
+
+ChatGPT assisted with dataset loading and test script development.
+The generated code was verified locally with real ADNI images.
+No model has been trained at this stage.
+

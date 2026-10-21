@@ -1,7 +1,8 @@
-"""COMP3710 ADNI data preparation, stage 1: audit and patient-level splits.
+"""COMP3710 ADNI data pipeline: audit, patient-level splitting and image loading.
 
-This version builds CSV manifests. A PyTorch Dataset will be added in the
-next stage, after the real image audit has been checked. No model is trained.
+Stage 1 validates images and creates the three CSV manifests (already run
+locally). Stage 2 reads those manifests in PyTorch without repeating the audit.
+No model is trained by this script.
 
 Split unit: patient, stratified by diagnosis, approximately 70/15/15.
 Training labels: NC=0, AD=1. Original metadata labels: NC=0, AD=2.
@@ -11,8 +12,8 @@ read only; the original train/test directories remain unchanged.
 Pillow image-decoding API reference:
 https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.load
 
-AI assistance: ChatGPT assisted with this initial implementation. Record the
-local checks actually performed in the README's AI disclosure before submission.
+AI assistance: ChatGPT assisted with stage-1 audit and stage-2 loader
+scaffolding. Independently verify local outputs and document AI use in README.
 """
 
 import argparse
@@ -22,12 +23,16 @@ import json
 import random
 import re
 import sys
+from pathlib import PurePosixPath
 from collections import Counter
 from itertools import combinations
 from pathlib import Path
 
+import torch
+from torch.utils.data import DataLoader, Dataset
+
 try:
-    from PIL import Image, __version__ as pillow_version
+    from PIL import Image, ImageOps, __version__ as pillow_version
 except ImportError:
     raise SystemExit("Pillow is required. Run: python -m pip install Pillow")
 
@@ -191,6 +196,176 @@ def summarize(rows):
         for label, name in CLASS_NAMES.items()
     }
     return result
+
+
+# -------------------- Stage 2: PyTorch data loading --------------------
+# CNN and ConvNeXt will use the SAME manifests and input preprocessing.
+# The scan's original "train"/"test" folder is NOT its new split.
+
+def load_manifest(manifest_path, data_root):
+    """Read a stage-1 manifest and validate labels, paths and patient IDs.
+
+    Relative paths point to the ORIGINAL JPEG locations; no copies are made.
+    """
+    manifest_path = Path(manifest_path)
+    data_root = Path(data_root).expanduser().resolve()
+    if not data_root.is_dir():
+        raise ValueError(f"Data directory not found: {data_root}")
+    if not manifest_path.is_file():
+        raise ValueError(f"Manifest missing: {manifest_path}")
+
+    required = {"relative_path", "patient_id", "scan_id", "slice_index",
+                "label", "class_name"}
+    records = []
+    seen_paths = set()
+    patient_labels = {}
+    with manifest_path.open("r", newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+            raise ValueError(f"Unexpected CSV columns in {manifest_path}")
+        for line_number, row in enumerate(reader, start=2):
+            try:
+                rel = PurePosixPath(row["relative_path"])
+                patient = row["patient_id"]
+                scan = row["scan_id"]
+                label = int(row["label"])
+                name = row["class_name"]
+                slice_index = int(row["slice_index"])
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ValueError(f"Invalid CSV entry on line {line_number}") from exc
+            if (rel.is_absolute() or ".." in rel.parts or "\\" in str(rel)
+                    or len(rel.parts) < 3):
+                raise ValueError(f"Unsafe relative path on line {line_number}: {rel}")
+            if not patient or not scan or label not in CLASS_NAMES:
+                raise ValueError(f"Invalid patient, scan or label on line {line_number}")
+            if CLASS_NAMES[label] != name:
+                raise ValueError(f"Label/class mismatch on line {line_number}")
+            if rel.as_posix() in seen_paths:
+                raise ValueError(f"Repeated image path on line {line_number}: {rel}")
+            seen_paths.add(rel.as_posix())
+            if patient in patient_labels and patient_labels[patient] != label:
+                raise ValueError(f"Conflicting diagnoses for {patient}")
+            patient_labels[patient] = label
+            records.append({
+                "relative_path": rel.as_posix(), "patient_id": patient,
+                "scan_id": scan, "slice_index": slice_index,
+                "label": label, "class_name": name,
+            })
+    if not records:
+        raise ValueError(f"Empty manifest: {manifest_path}")
+    return records
+
+
+def validate_manifest_separation(manifests):
+    """Fail if patients, scans OR image paths occur in multiple splits."""
+    for left, right in combinations(manifests, 2):
+        for field in ("patient_id", "scan_id", "relative_path"):
+            shared = ({record[field] for record in manifests[left]}
+                      & {record[field] for record in manifests[right]})
+            if shared:
+                raise ValueError(
+                    f"Data leakage between {left} and {right}: "
+                    f"{len(shared)} overlapping {field} values"
+                )
+
+
+def create_transforms(image_size=224, train=False, augment=False):
+    """MRI: preserve aspect ratio, pad to square, then ImageNet normalization.
+
+    Grayscale is converted to three identical RGB channels because standard
+    (pretrained) ConvNeXt expects three input channels. The baseline will use
+    the same input so comparisons are fair. Random rotation is opt-in and
+    restricted to training; no left-right flip or random validation transforms.
+    """
+    if image_size <= 0:
+        raise ValueError("image_size must be positive")
+    try:
+        from torchvision import transforms
+    except (ImportError, RuntimeError) as exc:
+        raise RuntimeError(
+            "A torchvision installation compatible with PyTorch is required. "
+            "Check versions using python -c \"import torch, torchvision; "
+            "print(torch.__version__, torchvision.__version__)\""
+        ) from exc
+    steps = []
+    if train and augment:
+        # A conservative augmentation for later experiments, disabled by default.
+        steps.append(transforms.RandomRotation(degrees=5, fill=0))
+    steps.extend([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
+    return transforms.Compose(steps)
+
+
+class ADNISliceDataset(Dataset):
+    """Read MRI slices on demand from an existing stage-1 CSV manifest.
+
+    Each sample contains image [3, H, W], label 0=NC/1=AD, patient ID,
+    scan ID and source-relative path (used for later error analysis).
+    """
+
+    def __init__(self, data_root, manifest_path, image_size=224,
+                 train=False, augment=False, records=None):
+        self.data_root = Path(data_root).expanduser().resolve()
+        self.image_size = image_size
+        self.records = (load_manifest(manifest_path, self.data_root)
+                        if records is None else records)
+        self.transform = create_transforms(image_size, train, augment)
+
+    def __len__(self):
+        return len(self.records)
+
+    def __getitem__(self, index):
+        record = self.records[index]
+        path = self.data_root / Path(record["relative_path"])
+        try:
+            with Image.open(path) as image:
+                # Black padding preserves the entire brain field of view.
+                # Unlike direct square resizing, it does not distort anatomy.
+                image = ImageOps.pad(image.convert("L"),
+                                     (self.image_size, self.image_size),
+                                     method=Image.Resampling.BILINEAR, color=0)
+                image = image.convert("RGB")  # ConvNeXt expects three channels.
+                tensor = self.transform(image)
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Could not read MRI slice {path}: {exc}") from exc
+        return {"image": tensor,
+                "label": record["label"],
+                "patient_id": record["patient_id"],
+                "scan_id": record["scan_id"],
+                "relative_path": record["relative_path"]}
+
+
+def make_dataloaders(data_root, manifest_dir, batch_size=8,
+                     image_size=224, num_workers=0, seed=42, augment_train=False):
+    """Create loaders from the EXISTING CSVs; do NOT regenerate splits.
+
+    Returns ({'train','val','test'} -> DataLoader). With num_workers=0 it is
+    Windows-friendly and makes initial debugging simpler.
+    """
+    if batch_size <= 0 or num_workers < 0:
+        raise ValueError("batch_size must be positive; num_workers non-negative")
+    root = Path(data_root).expanduser().resolve()
+    folder = Path(manifest_dir).expanduser().resolve()
+    manifests = {part: load_manifest(folder / f"{part}.csv", root)
+                 for part in ("train", "val", "test")}
+    validate_manifest_separation(manifests)
+    generator = torch.Generator().manual_seed(seed)
+    return {
+        part: DataLoader(
+            ADNISliceDataset(root, folder / f"{part}.csv", image_size=image_size,
+                         train=(part == "train"), augment=augment_train,
+                         records=manifests[part]),
+            batch_size=batch_size,
+            shuffle=(part == "train"),
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+            generator=generator if part == "train" else None,
+        )
+        for part in ("train", "val", "test")
+    }
 
 
 def main():
