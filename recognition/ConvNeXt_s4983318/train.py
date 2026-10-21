@@ -1,17 +1,23 @@
-"""Train the COMP3710 ADNI baseline CNN, using patient-disjoint CSV splits.
+r"""Train a COMP3710 ADNI CNN baseline or ConvNeXt-Tiny on fixed patient splits.
 
-Example (PowerShell, run from recognition/ConvNeXt_s4983318):
-    python train.py --data-root C:\\...\\AD_NC \
-        --manifest-dir C:\\...\\prepared_seed42 \
-        --output-dir C:\\...\\runs\\baseline_smoke \
-        --epochs 1 --max-train-batches 8 --max-val-batches 4
+The existing train.csv and val.csv are used for training and model selection;
+test.csv is ONLY read to check split separation, never evaluated here.
 
-Run from the project directory where dataset.py and modules.py are located.
-No test images are used here: training uses train.csv, model selection uses val.csv.
-The test manifest is checked for separation but NOT iterated over.
+Stage 4 smoke test (PowerShell, run from project directory):
+    & $py .\train.py `
+      --model convnext --pretrained `
+      --data-root "$HOME\Downloads\COMP3710\ADNI\AD_NC" `
+      --manifest-dir "$HOME\Downloads\COMP3710\prepared_seed42" `
+      --output-dir "$HOME\Downloads\COMP3710\runs\convnext_smoke01" `
+      --epochs 1 --batch-size 2 --max-train-batches 8 `
+      --max-val-batches 4 --device cuda
 
-AI-use disclosure: ChatGPT helped scaffold this training and logging script.
-Verify its results yourself and record any AI assistance in the README.
+The old baseline CLI still works: --model defaults to baseline, and its
+learning-rate default remains 1e-3. ConvNeXt defaults to 1e-4, because
+fine-tuning pretrained weights generally requires a smaller learning rate.
+
+AI-use disclosure: ChatGPT assisted with extending the training script.
+Verify outputs using a local smoke test and document assistance in README.
 """
 
 import argparse
@@ -26,7 +32,7 @@ import torch
 from torch import nn
 
 from dataset import make_dataloaders
-from modules import BaselineCNN
+from modules import BaselineCNN, build_convnext_tiny
 
 
 def classification_metrics(confusion):
@@ -124,7 +130,7 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None,
     return metrics
 
 
-def save_curves(history, output_dir):
+def save_curves(history, output_dir, model_title="Baseline CNN"):
     """Write separate loss and accuracy plots to files; never show a GUI window."""
     try:
         import matplotlib
@@ -143,7 +149,7 @@ def save_curves(history, output_dir):
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(epochs, [r[train_field] for r in history], marker="o", label="Train")
         ax.plot(epochs, [r[val_field] for r in history], marker="o", label="Validation")
-        ax.set(xlabel="Epoch", ylabel=label, title=f"Baseline CNN: {label}")
+        ax.set(xlabel="Epoch", ylabel=label, title=f"{model_title}: {label}")
         ax.grid(alpha=0.2)
         ax.legend()
         fig.tight_layout()
@@ -156,10 +162,15 @@ def main():
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--manifest-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--model", choices=("baseline", "convnext"),
+                        default="baseline", help="Model architecture to train")
+    parser.add_argument("--pretrained", action="store_true",
+                        help="ConvNeXt only: load ImageNet-1K pretrained weights")
     parser.add_argument("--epochs", type=int, default=12)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--image-size", type=int, default=224)
-    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--lr", type=float, default=None,
+                        help="Learning rate (baseline: 1e-3, ConvNeXt: 1e-4 by default)")
     parser.add_argument("--weight-decay", type=float, default=0.0001)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
@@ -171,10 +182,14 @@ def main():
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     args = parser.parse_args()
 
+    if args.pretrained and args.model != "convnext":
+        parser.error("--pretrained is only valid with --model convnext")
+    # Keep baseline's previously tested settings unchanged.
+    lr = args.lr if args.lr is not None else (1e-4 if args.model == "convnext" else 1e-3)
     if (args.epochs < 1 or args.batch_size < 1 or args.image_size < 32
             or args.num_workers < 0 or args.max_train_batches < 0
             or args.max_val_batches < 0 or args.patience < 1
-            or not math.isfinite(args.lr) or args.lr <= 0
+            or not math.isfinite(lr) or lr <= 0
             or not math.isfinite(args.weight_decay) or args.weight_decay < 0):
         parser.error("Invalid numeric arguments; check epochs/batch size/learning rate/limits")
     if args.device == "cuda" and not torch.cuda.is_available():
@@ -209,18 +224,32 @@ def main():
         num_workers=args.num_workers, seed=args.seed, augment_train=False,
     )
     train_loader, val_loader = loaders["train"], loaders["val"]
-    model = BaselineCNN(num_classes=2).to(device)
-    print(f"BaselineCNN parameters: {sum(p.numel() for p in model.parameters()):,}")
+    if args.model == "baseline":
+        architecture = "BaselineCNN"
+        model = BaselineCNN(num_classes=2)
+        checkpoint_name = "best_baseline.pt"
+        model_title = "Baseline CNN"
+    else:
+        architecture = "ConvNeXt-Tiny"
+        print(f"Loading ConvNeXt-Tiny (ImageNet pretrained: {args.pretrained})...", flush=True)
+        model = build_convnext_tiny(num_classes=2, pretrained=args.pretrained)
+        checkpoint_name = "best_convnext.pt"
+        model_title = "ConvNeXt-Tiny"
+    model = model.to(device)
+    print(f"{architecture} parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Training: {len(train_loader.dataset):,} slices; validation: {len(val_loader.dataset):,} slices")
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr,
                                   weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
 
-    config = {"architecture": "BaselineCNN", "seed": args.seed,
+    config = {"architecture": architecture, "model": args.model,
+              "pretrained": args.pretrained,
+              "pretrained_weights": "IMAGENET1K_V1" if args.pretrained else None,
+              "seed": args.seed,
               "epochs_requested": args.epochs, "batch_size": args.batch_size,
-              "image_size": args.image_size, "lr": args.lr,
+              "image_size": args.image_size, "lr": lr,
               "weight_decay": args.weight_decay, "device": str(device),
               "torch_version": torch.__version__, "diagnostic": diagnostic,
               "max_train_batches": args.max_train_batches,
@@ -234,6 +263,7 @@ def main():
 
     history = []
     best_loss, best_epoch, wait = float("inf"), None, 0
+    best_train_stats, best_val_stats = None, None
     start = time.perf_counter()
 
     for epoch in range(1, args.epochs + 1):
@@ -271,14 +301,17 @@ def main():
         if val_stats["loss"] < best_loss:
             best_loss = val_stats["loss"]
             best_epoch = epoch
+            best_train_stats = train_stats.copy()
+            best_val_stats = val_stats.copy()
             wait = 0
             torch.save({
                 "model_state_dict": model.state_dict(),
-                "architecture": "BaselineCNN", "epoch": epoch,
+                "architecture": architecture, "model": args.model,
+                "pretrained": args.pretrained, "epoch": epoch,
                 "image_size": args.image_size, "num_classes": 2,
                 "val_loss": best_loss, "diagnostic": diagnostic,
                 "class_names": {0: "NC", 1: "AD"},
-            }, output_dir / "best_baseline.pt")
+            }, output_dir / checkpoint_name)
             print("  Best checkpoint updated (by validation loss).", flush=True)
         else:
             wait += 1
@@ -286,10 +319,13 @@ def main():
                 print(f"Early stopping: validation loss did not improve for {args.patience} epochs.")
                 break
 
-    save_curves(history, output_dir)
+    save_curves(history, output_dir, model_title=model_title)
     peak_vram_mb = (torch.cuda.max_memory_allocated(device) / (1024 ** 2)
                     if device.type == "cuda" else None)
-    result = {"best_epoch": best_epoch, "best_val_loss": best_loss,
+    result = {"architecture": architecture, "pretrained": args.pretrained,
+              "checkpoint": checkpoint_name,
+              "best_epoch": best_epoch, "best_val_loss": best_loss,
+              "best_train": best_train_stats, "best_val": best_val_stats,
               "completed_epochs": len(history),
               "total_seconds": time.perf_counter() - start,
               "peak_cuda_memory_mb": peak_vram_mb, "diagnostic": diagnostic,

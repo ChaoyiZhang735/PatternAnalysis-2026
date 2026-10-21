@@ -72,3 +72,28 @@ class BaselineCNN(nn.Module):
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         features = self.features(images)
         return self.classifier(features)
+
+
+def build_convnext_tiny(num_classes: int = 2, pretrained: bool = False) -> nn.Module:
+    """Create ConvNeXt-Tiny with a two-class head for ADNI classification.
+
+    Uses the standard torchvision ConvNeXt-Tiny implementation. The caller
+    controls whether to transfer ImageNet pretrained weights; when True,
+    torchvision may need to download the weights. Replacing only the final
+    linear layer retains pretrained feature extraction weights.
+
+    Input shape: [N, 3, 224, 224], ImageNet-normalized as in dataset.py.
+    Output shape: [N, num_classes] raw logits (no Softmax).
+    """
+    if num_classes < 2:
+        raise ValueError('num_classes must be at least 2')
+    try:
+        from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
+    except (ImportError, RuntimeError) as exc:
+        raise RuntimeError('A compatible torchvision installation is required.') from exc
+
+    weights = ConvNeXt_Tiny_Weights.IMAGENET1K_V1 if pretrained else None
+    model = convnext_tiny(weights=weights)
+    input_features = model.classifier[-1].in_features
+    model.classifier[-1] = nn.Linear(input_features, num_classes)
+    return model
