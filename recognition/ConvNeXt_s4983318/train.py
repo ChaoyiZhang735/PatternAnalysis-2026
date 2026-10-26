@@ -4,7 +4,7 @@ The existing train.csv and val.csv are used for training and model selection.
 The held-out test split remains untouched by default and is evaluated only when
 --evaluate-test and --confirm-test are both supplied.
 
-Stage 4 smoke test (PowerShell, run from project directory):
+Example diagnostic smoke test (PowerShell, run from project directory):
     & $py .\train.py `
       --model convnext --pretrained `
       --data-root "$HOME\Downloads\COMP3710\ADNI\AD_NC" `
@@ -13,12 +13,13 @@ Stage 4 smoke test (PowerShell, run from project directory):
       --epochs 1 --batch-size 2 --max-train-batches 8 `
       --max-val-batches 4 --device cuda
 
-The old baseline CLI still works: --model defaults to baseline, and its
+The baseline CLI remains available: --model defaults to baseline, and its
 learning-rate default remains 1e-3. ConvNeXt defaults to 1e-4, because
 fine-tuning pretrained weights generally requires a smaller learning rate.
 
 AI-use disclosure: ChatGPT assisted with extending the training script.
-Verify outputs using a local smoke test and document assistance in README.
+The training path was verified locally with diagnostic smoke tests; AI
+assistance is documented in README.md.
 """
 
 import argparse

@@ -1,6 +1,6 @@
 """Neural-network components for COMP3710 ADNI AD-vs-NC classification.
 
-Stage 3: a small CNN baseline used to benchmark ConvNeXt-Tiny later.
+Defines the baseline CNN and TorchVision ConvNeXt-Tiny model builder.
 Input : float32 MRI tensor [batch, 3, 224, 224].
 Output: raw class logits [batch, 2], with class 0=NC and 1=AD.
 
@@ -8,7 +8,7 @@ The model intentionally does NOT contain a Softmax layer. During training,
 ``torch.nn.CrossEntropyLoss`` expects unnormalised logits.
 
 AI-use note: ChatGPT assisted with the initial implementation and comments.
-Check its operation using test_models.py and document the verification.
+The implementation was verified locally using test_models.py and test_convnext.py.
 """
 
 import torch
@@ -77,10 +77,20 @@ class BaselineCNN(nn.Module):
 def build_convnext_tiny(num_classes: int = 2, pretrained: bool = False) -> nn.Module:
     """Create ConvNeXt-Tiny with a two-class head for ADNI classification.
 
-    Uses the standard torchvision ConvNeXt-Tiny implementation. The caller
-    controls whether to transfer ImageNet pretrained weights; when True,
-    torchvision may need to download the weights. Replacing only the final
-    linear layer retains pretrained feature extraction weights.
+    Uses the standard TorchVision ConvNeXt-Tiny implementation rather than
+    reimplementing the architecture from scratch.
+
+    Architecture reference:
+    Liu et al., "A ConvNet for the 2020s", CVPR 2022.
+    https://openaccess.thecvf.com/content/CVPR2022/html/
+    Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html
+
+    TorchVision implementation:
+    https://pytorch.org/vision/stable/models/convnext.html
+
+    The caller controls whether ImageNet-1K pretrained weights are used.
+    Replacing only the final linear layer retains the pretrained feature
+    extraction backbone while adapting the classifier to NC versus AD.
 
     Input shape: [N, 3, 224, 224], ImageNet-normalized as in dataset.py.
     Output shape: [N, num_classes] raw logits (no Softmax).
