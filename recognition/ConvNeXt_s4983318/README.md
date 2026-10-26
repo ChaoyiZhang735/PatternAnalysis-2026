@@ -154,6 +154,10 @@ The final codebase was re-verified using `test_dataset.py` with batch size 8. Th
 
 The final codebase was re-verified using `test_models.py` on a training batch of size 8. `BaselineCNN` contained **425,746 parameters**, accepted input tensors of shape `(8, 3, 224, 224)`, and produced logits of shape `(8, 2)`. The untrained smoke-test cross-entropy loss was **0.7264**. Forward propagation, loss computation, backward propagation, finite non-zero gradients, and one optimizer step all completed successfully. No full training, test-set evaluation, or checkpoint saving was performed during this verification.
 
+### 5.2.3 Final ConvNeXt-Tiny verification
+
+The final codebase was re-verified using `test_convnext.py` on a training batch of size 2. The diagnostic ConvNeXt-Tiny instance contained **27,821,666 parameters**, accepted input tensors of shape `(2, 3, 224, 224)`, and produced logits of shape `(2, 2)`. The untrained diagnostic cross-entropy loss was **0.7361**. One forward/backward optimizer step completed in **4.75 seconds** with peak PyTorch allocated CUDA memory of **552.8 MiB**. This smoke test used no ImageNet pretrained weights and was intended only to verify the implementation path; the reported final ConvNeXt experiment used ImageNet-1K V1 pretrained initialization. Test images were not accessed and no weights were saved during this diagnostic verification.
+
 ### 5.3 Full training commands
 
 Use new, empty output folders when reproducing; `train.py` refuses to overwrite populated run directories. This example uses **new `*_repro` folder names** to avoid overwriting the recorded checkpoints.
