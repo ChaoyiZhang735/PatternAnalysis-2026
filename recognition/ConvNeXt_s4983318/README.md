@@ -1,9 +1,9 @@
 # ADNI MRI Classification: Baseline CNN vs. ConvNeXt-Tiny
 
-**Course:** COMP3710 Pattern Recognition (2026)  
-**Project:** AD versus cognitively normal (CN/NC) classification  
-**Selected difficulty:** Hard — ConvNeXt-Tiny  
-**Implementation:** PyTorch / TorchVision  
+**Course:** COMP3710 Pattern Recognition (2026)
+**Project:** AD versus cognitively normal (CN/NC) classification
+**Selected difficulty:** Hard — ConvNeXt-Tiny
+**Implementation:** PyTorch / TorchVision
 **Status:** Both models have been implemented, trained, and evaluated on a held-out patient-independent test set. The compulsory tutor feasibility check-off has been completed.
 
 > **Research prototype, not a medical device.** Predicted scores are not validated clinical probabilities. No result in this project justifies autonomous diagnosis or bypassing clinical review.
@@ -66,7 +66,7 @@ The initial audit found **216 patients in both source `train` and source `test`*
 
 Checks performed: all 30,520 source JPEGs decoded, each image assigned exactly once, image dimensions/modes checked, folder labels matched metadata, patient diagnoses checked for conflicts, and **zero shared patient IDs, scan IDs or image paths** confirmed across every new pair of splits. These are checks on the downloaded images, not cryptographic proof of an identical server copy. The 38 AD/NC metadata scans without downloaded JPEGs were excluded; the working dataset is defined by actual images present.
 
-**Split limitation:** replacing the original split may affect direct comparability with course examples or published work. The justification and acceptability should be discussed with the tutor.
+**Split limitation:** replacing the original source-folder assignment guarantees patient-disjoint evaluation for this experiment, but it reduces direct comparability with course examples or published work that use a different split. The reported metrics should therefore be interpreted specifically under this patient-independent protocol rather than as directly comparable benchmark numbers.
 
 ### 3.3 Input preprocessing
 
@@ -82,7 +82,23 @@ The baseline is a four-block network with channel progression **3 → 16 → 32 
 
 `modules.py` constructs TorchVision `convnext_tiny` and replaces its final classifier layer with a two-output `torch.nn.Linear`. The recorded model uses **ImageNet-1K V1 pretrained weights** and fine-tunes the network for AD/NC. **27,821,666 parameters**. The architecture is **reused from TorchVision** rather than implemented independently layer-by-layer; this is disclosed for clarity and attribution [2, 3].
 
-The baseline and ConvNeXt both output logits `[batch, 2]`. The loss is `CrossEntropyLoss` on unnormalized logits; softmax is applied only when probabilities are needed for evaluation.
+ConvNeXt remains a convolutional neural network, but modernizes the conventional CNN design using several ideas associated with transformer-era vision systems. A ConvNeXt block first applies a **7 ? 7 depthwise convolution** to mix spatial information independently within each feature channel. It then applies **LayerNorm**, expands the channel representation using a pointwise transformation, applies **GELU**, projects the representation back to its original width, and adds a **residual connection**. This separates spatial mixing from channel mixing while preserving stable gradient flow through a deep network.
+
+ConvNeXt-Tiny contains four hierarchical stages with block depths **[3, 3, 9, 3]** and channel widths **[96, 192, 384, 768]**. Downsampling between stages progressively reduces spatial resolution while increasing feature width. Earlier stages therefore represent relatively local intensity and edge patterns, while later stages combine information over larger image regions and can encode broader structural patterns.
+
+For this ADNI task, each grayscale MRI slice is resized and padded to **224 ? 224**, then replicated into three identical channels so that the pretrained ImageNet stem can be reused. After the final ConvNeXt stage, global average pooling and normalization produce a compact feature representation. The original ImageNet classification head is replaced by a **768 ? 2** linear layer producing raw NC/AD logits.
+
+![ConvNeXt-Tiny adaptation for ADNI classification](figures/convnext_architecture.png)
+
+| ConvNeXt component | Working principle | Role in this ADNI pipeline |
+|---|---|---|
+| Input adaptation | Grayscale slice ? 3 replicated channels, 224 ? 224 | Matches the pretrained TorchVision input interface |
+| Stem / downsampling | Strided convolutions progressively reduce spatial resolution | Builds a hierarchical representation while controlling computation |
+| ConvNeXt block | 7 ? 7 depthwise spatial mixing + LayerNorm + pointwise channel mixing + GELU + residual connection | Combines spatial and channel information efficiently |
+| Four stages | Depths [3, 3, 9, 3], widths [96, 192, 384, 768] | Progresses from lower-level appearance cues to broader structural features |
+| Classification head | Global average pooling + normalization + 768 ? 2 linear layer | Produces raw NC/AD logits |
+
+The baseline and ConvNeXt both output logits `[batch, 2]`. The loss is `CrossEntropyLoss` on unnormalized logits; softmax is applied only when probabilities are needed for evaluation. ConvNeXt's substantially greater representational capacity can improve recognition, but that capacity may also amplify shortcut features or produce sharply confident mistakes. This motivates the calibration and failure analysis in Sections 7?8.
 
 ### 4.3 Experimental settings and checkpoint policy
 
@@ -200,6 +216,22 @@ The final evaluation script requires an explicit `--confirm-test` to reduce acci
 
 Outputs include `evaluation.json`, `slice_predictions.csv`, `patient_predictions.csv`, confidence/review plots, `failure_cases.csv` and an illustrative `failure_examples.png`. Generated patient/slice prediction tables and original MRI images must **not** be committed to public GitHub. The analytic plots included in this README use aggregated statistics only.
 
+### 5.5 Example inference record without patient-identifying content
+
+A model input is one preprocessed MRI slice represented as a tensor of shape `[3, 224, 224]`; the three channels are replicated copies of the same grayscale slice. The model outputs two logits, which are converted to `P(NC)` and `P(AD)` only for evaluation. To avoid publishing patient identifiers or source MRI pixels, the example below uses the numerical output from Failure Case 5.
+
+| Stage | Example |
+|---|---|
+| Preprocessed input | One grayscale MRI slice ? tensor `[3, 224, 224]` |
+| Slice ground truth | NC |
+| Slice output | `P(AD) = 0.50146` ? predicted AD, confidence 0.50146 |
+| Patient aggregation | Mean `P(AD) = 0.0978` across that patient's slices |
+| Patient output | Predicted NC, confidence 0.9022 |
+| Review rule at 0.90 | Patient classification provisionally accepted |
+
+This example demonstrates the distinction between slice-level inference and the patient-level aggregation used for the engineering recommendation, without exposing raw medical images or patient identifiers.
+
+
 ## 6. Quantitative evaluation: independent test data
 
 The final test partition contains **4,460 slices from 102 patients**. The checkpoints were chosen using validation loss before the test was evaluated. Slice-level results treat each slice as a prediction; patient-level results take the **mean predicted AD probability across that patient's available slices** and classify as AD when the mean is at least 0.5. Correlated slices are not statistically independent observations.
@@ -241,7 +273,37 @@ ConvNeXt improves slice accuracy by **3.45 percentage points** and AD recall by 
 - **Baseline patient confusion:** `[[54, 15], [7, 26]]`
 - **ConvNeXt patient confusion:** `[[55, 14], [3, 30]]`
 
-Patient-level aggregation corrects some slice-level errors, but **17/102** patients remain incorrectly classified by ConvNeXt. Because the independent test contains only 102 patients, performance estimates are uncertain, and external data would be required before clinical claims.
+Patient-level aggregation corrects some slice-level errors, but **17/102** patients remain incorrectly classified by ConvNeXt.
+
+#### 6.2.1 Patient-level uncertainty
+
+Because multiple MRI slices belong to the same patient, uncertainty was estimated by resampling **patients rather than slices**. We used **10,000 stratified patient-level bootstrap replicates with replacement** (seed 42), preserving the observed test-set composition of **69 NC and 33 AD patients** in every replicate.
+
+| Patient-level metric | Baseline CNN, estimate [95% CI] | ConvNeXt-Tiny, estimate [95% CI] |
+|---|---:|---:|
+| Accuracy | 0.7843 [0.7059, 0.8627] | **0.8333 [0.7549, 0.9020]** |
+| Macro-F1 | 0.7667 [0.6819, 0.8478] | **0.8227 [0.7479, 0.8927]** |
+| AD recall | 0.7879 [0.6364, 0.9091] | **0.9091 [0.7879, 1.0000]** |
+| AUROC | 0.9043 [0.8428, 0.9543] | **0.9372 [0.8889, 0.9745]** |
+
+These intervals quantify sampling uncertainty within the 102-patient held-out test set. They should not be interpreted as external clinical confidence bounds.
+
+#### 6.2.2 Paired comparison of ConvNeXt and the baseline
+
+Because both models were evaluated on the **same 102 patients**, model differences were also analysed using a **paired stratified patient bootstrap**. Each bootstrap replicate sampled the same patient IDs for both models while preserving the observed NC/AD composition. The reported difference is `ConvNeXt ? Baseline`.
+
+| Metric difference | Point difference | 95% paired bootstrap CI |
+|---|---:|---:|
+| Accuracy | **+0.0490** (+4.90 percentage points) | [-0.0196, +0.1176] |
+| Macro-F1 | **+0.0559** | [-0.0134, +0.1309] |
+| AD recall | **+0.1212** (+12.12 percentage points) | **[+0.0303, +0.2424]** |
+| AUROC | **+0.0329** | [-0.0031, +0.0755] |
+
+![Paired patient-level bootstrap comparison](figures/paired_bootstrap_delta.png)
+
+ConvNeXt produced higher point estimates for all four patient-level metrics. However, the 95% paired difference intervals for **accuracy, Macro-F1 and AUROC include zero**, so those improvements are best interpreted descriptively rather than as evidence of a statistically established difference. The interval for **AD recall does not include zero**, providing stronger evidence within this test set that ConvNeXt reduced missed AD cases relative to the baseline.
+
+This analysis does not replace external validation. The test set contains only 102 patients from the course-provided dataset, and bootstrap intervals quantify uncertainty under this observed sample rather than performance on new clinical populations.
 
 ## 7. Confidence, calibration and an illustrative review rule
 
@@ -281,23 +343,34 @@ ConvNeXt would send fewer cases to review at a similar observed accepted-case ac
 
 ## 8. Failure case autopsy: five actual test-set slice errors
 
-Five errors were chosen deterministically by the evaluation script: two high-confidence **AD → NC** (false negatives), two high-confidence **NC → AD** (false positives), and one low-confidence/borderline incorrect slice. They correspond to **five distinct patients**. The table checks whether each slice error persists after patient-level aggregation. Individual patient identifiers and original MRI pictures are intentionally excluded from this public README pending data-governance review.
+Five errors were chosen deterministically by the evaluation script: two high-confidence **AD ? NC** (false negatives), two high-confidence **NC ? AD** (false positives), and one low-confidence/borderline incorrect slice. They correspond to **five distinct patients**. The table checks whether each slice error persists after patient-level aggregation. Individual patient identifiers and original MRI pictures are intentionally excluded from this public README pending data-governance review.
 
-| Case | True → predicted slice | Slice confidence | Patient-level result | Patient `P(AD)` | Patient confidence | Review at 0.90 |
+| Case | True ? predicted slice | Slice confidence | Patient-level result | Patient `P(AD)` | Patient confidence | Review at 0.90 |
 |---|---|---:|---|---:|---:|---|
-| 1 | AD → NC | 0.99985 | **Wrong: AD → NC** | 0.3712 | 0.6288 | Referred |
-| 2 | AD → NC | 0.99969 | **Correct: AD → AD** | 0.7259 | 0.7259 | Referred |
-| 3 | NC → AD | 0.99997 | **Wrong: NC → AD** | 0.9886 | 0.9886 | **Wrongly accepted** |
-| 4 | NC → AD | 0.99995 | **Wrong: NC → AD** | 0.8284 | 0.8284 | Referred |
-| 5 | NC → AD | 0.50146 | **Correct: NC → NC** | 0.0978 | 0.9022 | Correctly accepted |
+| 1 | AD ? NC | 0.99985 | **Wrong: AD ? NC** | 0.3712 | 0.6288 | Referred |
+| 2 | AD ? NC | 0.99969 | **Correct: AD ? AD** | 0.7259 | 0.7259 | Referred |
+| 3 | NC ? AD | 0.99997 | **Wrong: NC ? AD** | 0.9886 | 0.9886 | **Wrongly accepted** |
+| 4 | NC ? AD | 0.99995 | **Wrong: NC ? AD** | 0.8284 | 0.8284 | Referred |
+| 5 | NC ? AD | 0.50146 | **Correct: NC ? NC** | 0.0978 | 0.9022 | Correctly accepted |
 
-**Cases 1–2 (high-confidence false negatives).** Both single slices were labelled AD but confidently predicted NC. Their visible brain cross sections have different spatial coverage and contrast, illustrating substantial within-task anatomical and acquisition variation. Patient averaging corrected **Case 2** but not **Case 1**. A plausible *hypothesis* is slice-position sensitivity; the images alone cannot establish causation or the underlying neuropathology.
+### 8.1 Engineering autopsy of the five cases
 
-**Cases 3–4 (high-confidence false positives).** Both NC slices were incorrectly predicted AD with near-unit confidence. The selected slices vary in visible tissue structure and intensity. Potential texture, anatomical-sampling or scanner-related shortcuts merit investigation, but are **not proven explanations**. In **Case 3**, the patient was also wrongly predicted AD with confidence **0.9886**, so the 0.90 referral rule would miss this false alarm. **Case 4** would be referred because its patient confidence was 0.8284.
+**Case 1 ? high-confidence false negative that persists at patient level.**
+**Observation:** an AD slice was predicted NC with confidence **0.99985**. **Evidence:** patient aggregation also remained wrong, with patient `P(AD) = 0.3712` and confidence 0.6288. **Plausible trigger:** slice-position, acquisition, contrast or anatomical-sampling variation may have shifted the observed appearance toward features learned for NC; the available evidence does not establish a causal anatomical explanation. **Operational consequence:** the slice confidence is dangerously misleading, although the patient-level 0.90 rule would still refer this patient because aggregate confidence is low. **Mitigation:** preserve patient/scan aggregation, investigate performance by slice position and scan type, and use validation-only calibration or attribution analysis before relying on confidence.
 
-**Case 5 (borderline slice error).** The selected NC slice received **P(AD) = 0.50146**; the individual slice fell just across the classification boundary. The patient's average across slices was **P(AD) = 0.0978**, correctly predicting NC with confidence 0.9022. This provides a concrete example of how aggregation can correct a borderline per-slice error.
+**Case 2 ? high-confidence false negative corrected by aggregation.**
+**Observation:** an AD slice was predicted NC with confidence **0.99969**. **Evidence:** averaging across the patient's other slices reversed the decision to AD with `P(AD) = 0.7259`; the patient remains below the 0.90 automation threshold and would be referred. **Plausible trigger:** an individual slice may omit or under-represent discriminative anatomy even when the broader scan contains sufficient evidence. **Operational consequence:** single-slice predictions should not be treated as independent clinical cases. **Mitigation:** prefer scan/patient aggregation and quantify which slice positions contribute the most reliable evidence.
 
-**What can and cannot be concluded:** differences in anatomical coverage, brightness and local shape are visible; whether the network used those differences to decide AD/NC is unknown. A controlled follow-up could study per-scan aggregation, stratification by slice position or scan type, and Grad-CAM/feature attribution. Such work must not be presented as a demonstrated causal explanation or a radiologist's diagnosis.
+**Case 3 ? high-confidence false positive that defeats the review threshold.**
+**Observation:** an NC slice was predicted AD with confidence **0.99997**. **Evidence:** the patient was also predicted AD with `P(AD) = 0.9886`, so the fixed 0.90 rule would **wrongly accept** the error. **Plausible trigger:** texture, scanner/acquisition characteristics or anatomical sampling may act as shortcuts correlated with AD in the training data, although this remains a hypothesis. **Operational consequence:** confidence thresholding alone cannot guarantee safe triage because some errors remain confidently wrong after aggregation. **Mitigation:** investigate class-conditional calibration, out-of-distribution checks and feature attribution, and retain human review for deployment-sensitive decisions until external validation is available.
+
+**Case 4 ? high-confidence slice false positive caught by patient-level review.**
+**Observation:** an NC slice was predicted AD with confidence **0.99995**. **Evidence:** the patient-level score was less extreme (`P(AD) = 0.8284`), so the 0.90 rule would refer the case. **Plausible trigger:** the same shortcut or slice-coverage hypotheses as Case 3 are possible, but aggregation weakens the spurious evidence. **Operational consequence:** patient-level aggregation improves robustness but does not eliminate errors. **Mitigation:** retain aggregation and analyse whether specific scans or slice ranges disproportionately drive false positives.
+
+**Case 5 ? borderline slice error corrected by a confident patient aggregate.**
+**Observation:** an NC slice fell just across the decision boundary with `P(AD) = 0.50146`. **Evidence:** the patient's aggregate was `P(AD) = 0.0978`, correctly predicting NC with confidence 0.9022. **Plausible trigger:** the slice itself is ambiguous to the trained classifier rather than representing a clear high-confidence failure. **Operational consequence:** a hard 0.5 slice threshold can produce unstable decisions near the boundary. **Mitigation:** use patient-level aggregation and preserve continuous probabilities rather than interpreting a single binary slice decision in isolation.
+
+**What can and cannot be concluded:** the selected cases exhibit differences in anatomical coverage, brightness and local shape, but these experiments do not prove which visual cues caused an individual error. The autopsy therefore separates **observed prediction behaviour** from **hypotheses about failure triggers**. Controlled follow-up should examine per-scan aggregation, slice-position stratification, scanner/site robustness, temperature scaling and Grad-CAM/feature attribution before stronger causal claims are made.
 
 ## 9. Computational cost and deployment trade-off
 
@@ -322,25 +395,27 @@ ConvNeXt offers better recognition and higher patient-level review coverage, but
 
 **Limits to generalization:** (i) only 102 independent test patients; (ii) 2D slices and average pooling over all slices may overweight patients with more scans; (iii) the new patient-level split is different from the course's source-folder split; (iv) ConvNeXt uses transfer learning whereas the baseline is trained from scratch; (v) reported calibration has not been corrected by temperature scaling or externally validated; (vi) error cases do not establish anatomical causes; (vii) the models were evaluated on one source dataset and one random split; and (viii) existing test labels are not a substitute for clinical adjudication.
 
-**Next engineering steps, not completed in this report:** confirm implementation/split acceptability with the tutor; compare models under equal pretraining conditions, fit temperature scaling using validation data only, test robustness across sites/scans and patient subgroups, investigate per-scan versus per-patient aggregation, estimate patient-level confidence intervals, and commission clinical review before considering real triage. These are proposals, not claims of completed experiments.
+**Next engineering steps, not completed in this report:** compare models under equal pretraining conditions; fit temperature scaling using validation data only; test robustness across sites, scans and patient subgroups; compare alternative split protocols on future data without reusing the current test set for model selection; investigate per-scan versus per-patient aggregation; and commission clinical review before considering real triage. These are proposals, not claims of completed experiments.
 
 ## 11. Repository organization and submission checklist
 
 ```text
 recognition/ConvNeXt_s4983318/
-├── README.md                # Technical report and reproducibility
-├── modules.py               # CNN components and TorchVision ConvNeXt builder
-├── dataset.py               # Audit, patient-level split, Dataset and DataLoader
-├── train.py                 # Training, early stopping, logging and weights
-├── predict.py               # Evaluation, confidence and error analysis
-├── test_dataset.py          # DataLoader smoke test
-├── test_models.py           # Baseline forward/backward smoke test
-├── test_convnext.py         # ConvNeXt forward/backward smoke test
-└── figures/
-    ├── workflow.png
-    ├── training_loss.png
-    ├── test_performance.png
-    └── calibration_comparison.png
+??? README.md                # Technical report and reproducibility
+??? modules.py               # CNN components and TorchVision ConvNeXt builder
+??? dataset.py               # Audit, patient-level split, Dataset and DataLoader
+??? train.py                 # Training, early stopping, logging and weights
+??? predict.py               # Evaluation, confidence and error analysis
+??? test_dataset.py          # DataLoader smoke test
+??? test_models.py           # Baseline forward/backward smoke test
+??? test_convnext.py         # ConvNeXt forward/backward smoke test
+??? figures/
+    ??? workflow.png
+    ??? convnext_architecture.png
+    ??? training_loss.png
+    ??? test_performance.png
+    ??? calibration_comparison.png
+    ??? paired_bootstrap_delta.png
 ```
 
 The following administrative steps must be completed before the final course submission:
@@ -357,9 +432,9 @@ The following administrative steps must be completed before the final course sub
 
 **AI tools used:** OpenAI ChatGPT.
 
-**Tasks assisted:** experimental planning and task breakdown; PowerShell/Python environment debugging; patient-level leakage audit and data-splitting script scaffolding; PyTorch `Dataset`/`DataLoader` implementation; BaselineCNN and TorchVision ConvNeXt integration; training/evaluation script scaffolding; plotting and draft technical writing; generating candidate hypotheses and error-analysis structure.
+**Tasks assisted:** experimental planning and task breakdown; PowerShell/Python environment debugging; patient-level leakage audit and data-splitting script scaffolding; PyTorch `Dataset`/`DataLoader` implementation; BaselineCNN and TorchVision ConvNeXt integration; training/evaluation script scaffolding; plotting and draft technical writing; statistical uncertainty-analysis scaffolding including patient-level bootstrap procedures; and generating candidate hypotheses and error-analysis structure.
 
-**Human verification and responsibility:** The user ran all reported analyses locally on the course ADNI data; confirmed the 30,520-image decode audit and zero-overlap split; tested real DataLoader batches; verified CUDA forward/backward passes for each model; completed full training and saved checkpoint selection; and ran both models on the independent held-out test set. Reported metrics were cross-checked against saved `history.csv`, `summary.json` and model-specific `evaluation.json` outputs. The five failure examples were inspected together with their CSV entries and patient-level aggregation outcomes. The original source files were not edited during splitting. Unverified anatomical explanations are described explicitly as hypotheses. All code, numerical claims and the final submission must still be reviewed and owned by the student; AI-generated text or scripts are **not** evidence of independent correctness without these checks.
+**Human verification and responsibility:** The user ran all reported analyses locally on the course ADNI data; confirmed the 30,520-image decode audit and zero-overlap split; tested real DataLoader batches; verified CUDA forward/backward passes for each model; completed full training and saved checkpoint selection; and ran both models on the independent held-out test set. Reported metrics were cross-checked against saved `history.csv`, `summary.json` and model-specific `evaluation.json` outputs. Patient-level confidence intervals and paired model differences were subsequently recomputed from the saved final `patient_predictions.csv` files using 10,000 stratified patient bootstrap replicates (seed 42). The five failure examples were inspected together with their CSV entries and patient-level aggregation outcomes. The original source files were not edited during splitting. Unverified anatomical explanations are described explicitly as hypotheses. All code, numerical claims and the final submission must still be reviewed and owned by the student; AI-generated text or scripts are **not** evidence of independent correctness without these checks.
 
 ## References
 
