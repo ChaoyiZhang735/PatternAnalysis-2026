@@ -109,13 +109,11 @@ Both training runs used CUDA automatic mixed precision. We tracked loss, slice a
 
 The baseline's best validation loss was **0.4415** (epoch 6); ConvNeXt's was **0.6564** (epoch 2). Later training produced higher training accuracy without sustained validation-loss improvement, consistent with overfitting and/or overly sharp wrong predictions. The abrupt baseline validation-loss spike at epoch 5 is an observation, not a diagnosed cause.
 
+The measured local environment used Windows PowerShell, **Python 3.12.10**, **PyTorch 2.8.0+cu126**, **TorchVision 0.23.0+cu126**, **Pillow 12.3.0**, and **Matplotlib 3.11.2**. CUDA was available using an **NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)**. The experiments reported in this README were run in this environment.
 ## 5. Implementation and reproducibility
 
-### 5.1 Environment
-
-The measured local environment used Windows PowerShell, **Python 3.12.10**, **PyTorch 2.8.0+cu126**, **TorchVision 0.23.0+cu126**, CUDA available, and an **NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)**. Additional runtime packages are **Pillow** and **Matplotlib**. **Before submission, copy the exact locally installed Pillow and Matplotlib versions from `pip freeze` into this section**, because they were not present in the saved experiment summaries.
-
-The project has the required files `modules.py`, `dataset.py`, `train.py`, `predict.py`, `README.md` and additional diagnostics `test_dataset.py`, `test_models.py`, `test_convnext.py`. Keep the dataset, CSV manifests, model weights and patient-level predictions **outside the Git repository**.
+### 5.1 Environmen
+The measured local environment used Windows PowerShell, **Python 3.12.10**, **PyTorch 2.8.0+cu126**, **TorchVision 0.23.0+cu126**, **Pillow 12.3.0**, and **Matplotlib 3.11.2**. CUDA was available using an **NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)**. The experiments reported in this README were run in this environment.
 
 ### 5.2 Local setup and data manifest generation (PowerShell)
 
