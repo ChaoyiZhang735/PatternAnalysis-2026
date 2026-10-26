@@ -397,7 +397,7 @@ ConvNeXt offers better recognition and higher patient-level review coverage, but
 
 **Next engineering steps, not completed in this report:** compare models under equal pretraining conditions; fit temperature scaling using validation data only; test robustness across sites, scans and patient subgroups; compare alternative split protocols on future data without reusing the current test set for model selection; investigate per-scan versus per-patient aggregation; and commission clinical review before considering real triage. These are proposals, not claims of completed experiments.
 
-## 11. Repository organization and submission checklist
+## 11. Repository organization
 
 ```text
 recognition/ConvNeXt_s4983318/
@@ -417,16 +417,6 @@ recognition/ConvNeXt_s4983318/
     |-- calibration_comparison.png
     `-- paired_bootstrap_delta.png
 ```
-
-The following administrative steps must be completed before the final course submission:
-
-- [x] **Feasibility check-off:** compulsory tutor consultation completed.
-- [x] Record exact locally installed **Pillow and Matplotlib** versions for reproducibility.
-- [x] Verify the Markdown structure, diagrams, command examples, and reported plots against the final codebase and recorded experiment outputs.
-- [x] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. Final repository audit confirmed that datasets, manifests, patient-level predictions, evaluation outputs, and model weight files are not tracked.
-- [x] Open the required pull request from the personal fork's `topic-recognition` to the course repository's `topic-recognition` (**PR #32**).
-- [ ] Export the final `README.md` to PDF for Turnitin and submit it.
-- [ ] Review, respond to and incorporate tutor/maintainer PR feedback within the announced response window.
 
 ## 12. Artificial Intelligence Usage Disclosure
 
