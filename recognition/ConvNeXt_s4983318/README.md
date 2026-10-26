@@ -162,6 +162,8 @@ Use new, empty output folders when reproducing; `train.py` refuses to overwrite 
   --epochs 12 --batch-size 8 --lr 0.0001 --patience 4 --device cuda
 ```
 
+`train.py` leaves the held-out test split untouched by default. For an optional final end-to-end verification after training, test evaluation is enabled only when both `--evaluate-test` and `--confirm-test` are supplied. This path reloads the validation-selected best checkpoint before evaluating the held-out test split. The detailed calibration, confidence-threshold, patient-level aggregation, computational profiling, and failure-case analyses reported below are performed separately by `predict.py`.
+
 The checkpoints actually used for the reported results were:
 
 - `$runs\baseline_full_seed42\best_baseline.pt` (epoch 6)
