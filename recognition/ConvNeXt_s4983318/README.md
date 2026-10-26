@@ -146,6 +146,10 @@ Use the previously prepared `$manifests` for reproducing the exact existing expe
 & $py .\test_convnext.py --data-root $data --manifest-dir $manifests --batch-size 2 --device cuda
 ```
 
+### 5.2.1 Final DataLoader verification
+
+The final codebase was re-verified using `test_dataset.py` with batch size 8. The existing manifests loaded successfully with **21,360 training slices from 476 patients**, **4,700 validation slices from 102 patients**, and **4,460 test slices from 102 patients**. Each split produced image batches of shape `(8, 3, 224, 224)`, and the validation confirmed that the three CSV manifests remained patient-disjoint. No model training was performed and the original MRI data and manifests were not modified.
+
 ### 5.3 Full training commands
 
 Use new, empty output folders when reproducing; `train.py` refuses to overwrite populated run directories. This example uses **new `*_repro` folder names** to avoid overwriting the recorded checkpoints.
