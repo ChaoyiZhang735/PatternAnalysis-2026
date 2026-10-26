@@ -1,7 +1,8 @@
 r"""Train a COMP3710 ADNI CNN baseline or ConvNeXt-Tiny on fixed patient splits.
 
-The existing train.csv and val.csv are used for training and model selection;
-test.csv is ONLY read to check split separation, never evaluated here.
+The existing train.csv and val.csv are used for training and model selection.
+The held-out test split remains untouched by default and is evaluated only when
+--evaluate-test and --confirm-test are both supplied.
 
 Stage 4 smoke test (PowerShell, run from project directory):
     & $py .\train.py `
@@ -179,11 +180,25 @@ def main():
                         help="0 = full train loader; positive limit for smoke tests only")
     parser.add_argument("--max-val-batches", type=int, default=0,
                         help="0 = full val loader; positive limit for smoke tests only")
+    parser.add_argument(
+        "--evaluate-test",
+        action="store_true",
+        help="Evaluate the selected best checkpoint on the held-out test split after training",
+    )
+    parser.add_argument(
+        "--confirm-test",
+        action="store_true",
+        help="Required with --evaluate-test to prevent accidental test-set access",
+    )
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     args = parser.parse_args()
 
     if args.pretrained and args.model != "convnext":
         parser.error("--pretrained is only valid with --model convnext")
+    if args.evaluate_test and not args.confirm_test:
+        parser.error("--evaluate-test requires --confirm-test")
+    if args.evaluate_test and (args.max_train_batches > 0 or args.max_val_batches > 0):
+        parser.error("--evaluate-test is only allowed for a full training run")
     # Keep baseline's previously tested settings unchanged.
     lr = args.lr if args.lr is not None else (1e-4 if args.model == "convnext" else 1e-3)
     if (args.epochs < 1 or args.batch_size < 1 or args.image_size < 32
@@ -223,7 +238,9 @@ def main():
         batch_size=args.batch_size, image_size=args.image_size,
         num_workers=args.num_workers, seed=args.seed, augment_train=False,
     )
-    train_loader, val_loader = loaders["train"], loaders["val"]
+    train_loader = loaders["train"]
+    val_loader = loaders["val"]
+    test_loader = loaders["test"]
     if args.model == "baseline":
         architecture = "BaselineCNN"
         model = BaselineCNN(num_classes=2)
@@ -256,7 +273,7 @@ def main():
               "max_val_batches": args.max_val_batches,
               "split_rule": "patient level; manifests prepared with seed 42",
               "classes": {"0": "NC", "1": "AD"},
-              "test_evaluated": False}
+              "test_evaluated": bool(args.evaluate_test)}
     (output_dir / "run_config.json").write_text(
         json.dumps(config, indent=2) + "\n", encoding="utf-8"
     )
@@ -320,12 +337,39 @@ def main():
                 break
 
     save_curves(history, output_dir, model_title=model_title)
+
+    test_stats = None
+    if args.evaluate_test:
+        checkpoint_path = output_dir / checkpoint_name
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=True,
+        )
+        model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+
+        test_stats = run_epoch(
+            model,
+            test_loader,
+            criterion,
+            device,
+        )
+
+        print(
+            f"TEST: loss={test_stats['loss']:.4f}, "
+            f"accuracy={test_stats['accuracy']:.4f}, "
+            f"macro-F1={test_stats['macro_f1']:.4f}, "
+            f"patient accuracy={test_stats['patient_accuracy']:.4f}",
+            flush=True,
+        )
+
     peak_vram_mb = (torch.cuda.max_memory_allocated(device) / (1024 ** 2)
                     if device.type == "cuda" else None)
     result = {"architecture": architecture, "pretrained": args.pretrained,
               "checkpoint": checkpoint_name,
               "best_epoch": best_epoch, "best_val_loss": best_loss,
               "best_train": best_train_stats, "best_val": best_val_stats,
+              "test": test_stats,
               "completed_epochs": len(history),
               "total_seconds": time.perf_counter() - start,
               "peak_cuda_memory_mb": peak_vram_mb, "diagnostic": diagnostic,
@@ -337,6 +381,8 @@ def main():
     print(f"Checkpoints, CSV history, curves and summary saved in: {output_dir}")
     if diagnostic:
         print("SMOKE TEST COMPLETE: do NOT report these partial-run metrics as final performance.")
+    elif args.evaluate_test:
+        print("FULL TRAINING COMPLETE: selected best checkpoint evaluated on the held-out test split.")
     else:
         print("FULL TRAINING COMPLETE: test split remains untouched; later evaluate the selected checkpoint.")
 
