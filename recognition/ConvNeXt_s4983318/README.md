@@ -349,7 +349,7 @@ The following administrative steps must be completed before the final course sub
 - [x] **Feasibility check-off:** compulsory tutor consultation completed.
 - [x] Record exact locally installed **Pillow and Matplotlib** versions for reproducibility.
 - [ ] Verify the Markdown, diagrams and command examples in the GitHub preview; check that the plots match actual logs.
-- [ ] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. **Never commit ADNI images, patient IDs, manifests, predictions or model weight files.**
+- [x] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. Final repository audit confirmed that datasets, manifests, patient-level predictions, evaluation outputs, and model weight files are not tracked.
 - [ ] Open the required pull request from the personal fork's `topic-recognition` to the course repository's `topic-recognition` **before the assessment deadline**.
 - [ ] Export the final `README.md` to PDF for Turnitin and submit it.
 - [ ] Review, respond to and incorporate tutor/maintainer PR feedback within the announced response window.
