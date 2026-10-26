@@ -150,6 +150,10 @@ Use the previously prepared `$manifests` for reproducing the exact existing expe
 
 The final codebase was re-verified using `test_dataset.py` with batch size 8. The existing manifests loaded successfully with **21,360 training slices from 476 patients**, **4,700 validation slices from 102 patients**, and **4,460 test slices from 102 patients**. Each split produced image batches of shape `(8, 3, 224, 224)`, and the validation confirmed that the three CSV manifests remained patient-disjoint. No model training was performed and the original MRI data and manifests were not modified.
 
+### 5.2.2 Final BaselineCNN verification
+
+The final codebase was re-verified using `test_models.py` on a training batch of size 8. `BaselineCNN` contained **425,746 parameters**, accepted input tensors of shape `(8, 3, 224, 224)`, and produced logits of shape `(8, 2)`. The untrained smoke-test cross-entropy loss was **0.7264**. Forward propagation, loss computation, backward propagation, finite non-zero gradients, and one optimizer step all completed successfully. No full training, test-set evaluation, or checkpoint saving was performed during this verification.
+
 ### 5.3 Full training commands
 
 Use new, empty output folders when reproducing; `train.py` refuses to overwrite populated run directories. This example uses **new `*_repro` folder names** to avoid overwriting the recorded checkpoints.
