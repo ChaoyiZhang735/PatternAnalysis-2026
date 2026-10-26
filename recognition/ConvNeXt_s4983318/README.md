@@ -4,7 +4,7 @@
 **Project:** AD versus cognitively normal (CN/NC) classification  
 **Selected difficulty:** Hard — ConvNeXt-Tiny  
 **Implementation:** PyTorch / TorchVision  
-**Status:** Both models implemented, trained and evaluated on a held-out patient-independent test set. **Tutor feasibility check-off remains to be confirmed.**
+**Status:** Both models have been implemented, trained, and evaluated on a held-out patient-independent test set. The compulsory tutor feasibility check-off has been completed.
 
 > **Research prototype, not a medical device.** Predicted scores are not validated clinical probabilities. No result in this project justifies autonomous diagnosis or bypassing clinical review.
 
@@ -20,7 +20,7 @@ Alzheimer's disease (AD) can produce structural changes in brain MRI, but anatom
 
 ## 2. Feasibility review (compulsory check-off)
 
-**Consultation status:** Planned for **23 October 2026**; **not yet recorded as completed**. The official midpoint deadline must be checked against the course profile. This written section is intended for the tutor's required one-page feasibility discussion; an updated one-page handout is provided separately.
+**Consultation status:** The compulsory feasibility check-off was completed with the tutor. The written feasibility review below is retained in the final report as required by the assessment specification.
 
 ### 2.1 User need, scope and testable acceptance criteria
 
@@ -44,7 +44,6 @@ The full image audit successfully decoded **30,520** grayscale JPEG slices (**25
 
 Key risks are scanner/slice-position differences, small independent patient sample sizes, overfitting, severe overconfidence, use of a changed split rather than the original course split, and domain mismatch between ImageNet pretraining and MRI. We control leakage at patient level, select checkpoints/thresholds from validation results only and avoid making clinical claims. Training was feasible with mixed precision at batch size 8; the measured ConvNeXt peak **PyTorch allocated** training memory was **903.2 MiB** (not total device VRAM usage). If retraining is needed, possible fallbacks are reducing batch size, freezing backbone layers, stronger regularization or a lower learning rate. Any such changes would be separately logged and must not be selected retrospectively using the already-evaluated test set.
 
-**Questions for tutor:** Are the revised patient-disjoint split and direct TorchVision ConvNeXt-Tiny fine-tuning acceptable for this assessment? Has the mandatory check-off been formally recorded, and is the consultation within the course deadline?
 
 ## 3. Dataset, labels and leakage prevention
 
@@ -333,7 +332,7 @@ recognition/ConvNeXt_s4983318/
 
 The following administrative steps must be completed before the final course submission:
 
-- [ ] **Feasibility check-off:** present the updated one-page review to the tutor and confirm recorded completion **within the course-approved deadline**.
+- [x] **Feasibility check-off:** compulsory tutor consultation completed.
 - [ ] Ask whether the **patient-disjoint re-split** and **TorchVision ConvNeXt** approach satisfy course requirements; document any tutor feedback honestly.
 - [ ] Insert exact locally installed **Pillow and Matplotlib** versions (run `pip freeze` shown in Section 5).
 - [ ] Verify the Markdown, diagrams and command examples in the GitHub preview; check that the plots match actual logs.
