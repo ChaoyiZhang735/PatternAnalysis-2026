@@ -7,3 +7,10 @@
 .venv/
 runs/
 prepared_*/
+*.ckpt
+slice_predictions.csv
+patient_predictions.csv
+review_thresholds_*.csv
+failure_cases.csv
+evaluation.json
+audit_summary.json
