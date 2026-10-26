@@ -108,10 +108,9 @@ Both training runs used CUDA automatic mixed precision. We tracked loss, slice a
 
 The baseline's best validation loss was **0.4415** (epoch 6); ConvNeXt's was **0.6564** (epoch 2). Later training produced higher training accuracy without sustained validation-loss improvement, consistent with overfitting and/or overly sharp wrong predictions. The abrupt baseline validation-loss spike at epoch 5 is an observation, not a diagnosed cause.
 
-The measured local environment used Windows PowerShell, **Python 3.12.10**, **PyTorch 2.8.0+cu126**, **TorchVision 0.23.0+cu126**, **Pillow 12.3.0**, and **Matplotlib 3.11.2**. CUDA was available using an **NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)**. The experiments reported in this README were run in this environment.
 ## 5. Implementation and reproducibility
 
-### 5.1 Environmen
+### 5.1 Environment
 The measured local environment used Windows PowerShell, **Python 3.12.10**, **PyTorch 2.8.0+cu126**, **TorchVision 0.23.0+cu126**, **Pillow 12.3.0**, and **Matplotlib 3.11.2**. CUDA was available using an **NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)**. The experiments reported in this README were run in this environment.
 
 ### 5.2 Local setup and data manifest generation (PowerShell)
@@ -348,7 +347,7 @@ The following administrative steps must be completed before the final course sub
 
 - [x] **Feasibility check-off:** compulsory tutor consultation completed.
 - [x] Record exact locally installed **Pillow and Matplotlib** versions for reproducibility.
-- [ ] Verify the Markdown, diagrams and command examples in the GitHub preview; check that the plots match actual logs.
+- [x] Verify the Markdown structure, diagrams, command examples, and reported plots against the final codebase and recorded experiment outputs.
 - [x] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. Final repository audit confirmed that datasets, manifests, patient-level predictions, evaluation outputs, and model weight files are not tracked.
 - [x] Open the required pull request from the personal fork's `topic-recognition` to the course repository's `topic-recognition` (**PR #32**).
 - [ ] Export the final `README.md` to PDF for Turnitin and submit it.
