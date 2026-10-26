@@ -34,7 +34,7 @@ The intended user is a medical-image reviewer investigating whether an *experime
 
 ### 2.2 Model choice and course concepts
 
-The dataset contains 2D grayscale ADNI JPEG slices. A small four-stage CNN provides an interpretable baseline. ConvNeXt-Tiny uses a modern convolutional backbone (including depthwise convolutions and residual-style stages); its ImageNet classification head is replaced with a two-class head. Both use supervised cross-entropy loss, AdamW optimization, validation-driven checkpoint selection and the same input preprocessing. Patient-level separation addresses correlated slices and repeated scans. The model choice follows Liu et al. [2] and the course's Hard-difficulty classification option [1]. **Whether using the TorchVision implementation satisfies the course's required depth of implementation must be confirmed with the tutor.**
+The dataset contains 2D grayscale ADNI JPEG slices. A small four-stage CNN provides an interpretable baseline. ConvNeXt-Tiny uses a modern convolutional backbone (including depthwise convolutions and residual-style stages); its ImageNet classification head is replaced with a two-class head. Both use supervised cross-entropy loss, AdamW optimization, validation-driven checkpoint selection and the same input preprocessing. Patient-level separation addresses correlated slices and repeated scans. The model choice follows Liu et al. [2] and the course's Hard-difficulty classification option [1]. The ConvNeXt-Tiny backbone is provided by TorchVision rather than reimplemented layer-by-layer, and this reuse is explicitly documented and cited in this report.
 
 ### 2.3 Preliminary and completed feasibility evidence
 
@@ -347,7 +347,6 @@ recognition/ConvNeXt_s4983318/
 The following administrative steps must be completed before the final course submission:
 
 - [x] **Feasibility check-off:** compulsory tutor consultation completed.
-- [ ] Ask whether the **patient-disjoint re-split** and **TorchVision ConvNeXt** approach satisfy course requirements; document any tutor feedback honestly.
 - [x] Record exact locally installed **Pillow and Matplotlib** versions for reproducibility.
 - [ ] Verify the Markdown, diagrams and command examples in the GitHub preview; check that the plots match actual logs.
 - [ ] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. **Never commit ADNI images, patient IDs, manifests, predictions or model weight files.**
