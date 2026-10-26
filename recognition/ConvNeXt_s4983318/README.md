@@ -334,7 +334,7 @@ The following administrative steps must be completed before the final course sub
 
 - [x] **Feasibility check-off:** compulsory tutor consultation completed.
 - [ ] Ask whether the **patient-disjoint re-split** and **TorchVision ConvNeXt** approach satisfy course requirements; document any tutor feedback honestly.
-- [ ] Insert exact locally installed **Pillow and Matplotlib** versions (run `pip freeze` shown in Section 5).
+- [x] Record exact locally installed **Pillow and Matplotlib** versions for reproducibility.
 - [ ] Verify the Markdown, diagrams and command examples in the GitHub preview; check that the plots match actual logs.
 - [ ] Commit code, README and **aggregate-statistics-only figures** in incremental, meaningful Git commits. **Never commit ADNI images, patient IDs, manifests, predictions or model weight files.**
 - [ ] Open the required pull request from the personal fork's `topic-recognition` to the course repository's `topic-recognition` **before the assessment deadline**.
@@ -351,7 +351,7 @@ The following administrative steps must be completed before the final course sub
 
 ## References
 
-1. The University of Queensland, COMP3710 / COMP7710 *Pattern Recognition — Working Prototype Project in the Era of Artificial Intelligence*, assessment specification version 2.4 (2026), Sections 2.1, 3–6 and 8.
+1. The University of Queensland, COMP3710 / COMP7710 *Pattern Recognition — Working Prototype Project in the Era of Artificial Intelligence*, Final Assessment Specification, version 2.5 (2026), Sections 2.1, 3–6 and 8.
 2. Z. Liu, H. Mao, C.-Y. Wu, C. Feichtenhofer, T. Darrell and S. Xie, “A ConvNet for the 2020s,” *Proceedings of CVPR*, pp. 11976–11986, 2022. [Paper](https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html).
 3. PyTorch/TorchVision, *ConvNeXt model implementation and pretrained weights*, `torchvision.models.convnext_tiny` / `ConvNeXt_Tiny_Weights.IMAGENET1K_V1`. [Documentation](https://pytorch.org/vision/stable/models/convnext.html).
 4. Alzheimer's Disease Neuroimaging Initiative (ADNI), dataset information. [ADNI](https://adni.loni.usc.edu/).
