@@ -82,23 +82,23 @@ The baseline is a four-block network with channel progression **3 → 16 → 32 
 
 `modules.py` constructs TorchVision `convnext_tiny` and replaces its final classifier layer with a two-output `torch.nn.Linear`. The recorded model uses **ImageNet-1K V1 pretrained weights** and fine-tunes the network for AD/NC. **27,821,666 parameters**. The architecture is **reused from TorchVision** rather than implemented independently layer-by-layer; this is disclosed for clarity and attribution [2, 3].
 
-ConvNeXt remains a convolutional neural network, but modernizes the conventional CNN design using several ideas associated with transformer-era vision systems. A ConvNeXt block first applies a **7 ? 7 depthwise convolution** to mix spatial information independently within each feature channel. It then applies **LayerNorm**, expands the channel representation using a pointwise transformation, applies **GELU**, projects the representation back to its original width, and adds a **residual connection**. This separates spatial mixing from channel mixing while preserving stable gradient flow through a deep network.
+ConvNeXt remains a convolutional neural network, but modernizes the conventional CNN design using several ideas associated with transformer-era vision systems. A ConvNeXt block first applies a **7 x 7 depthwise convolution** to mix spatial information independently within each feature channel. It then applies **LayerNorm**, expands the channel representation using a pointwise transformation, applies **GELU**, projects the representation back to its original width, and adds a **residual connection**. This separates spatial mixing from channel mixing while preserving stable gradient flow through a deep network.
 
 ConvNeXt-Tiny contains four hierarchical stages with block depths **[3, 3, 9, 3]** and channel widths **[96, 192, 384, 768]**. Downsampling between stages progressively reduces spatial resolution while increasing feature width. Earlier stages therefore represent relatively local intensity and edge patterns, while later stages combine information over larger image regions and can encode broader structural patterns.
 
-For this ADNI task, each grayscale MRI slice is resized and padded to **224 ? 224**, then replicated into three identical channels so that the pretrained ImageNet stem can be reused. After the final ConvNeXt stage, global average pooling and normalization produce a compact feature representation. The original ImageNet classification head is replaced by a **768 ? 2** linear layer producing raw NC/AD logits.
+For this ADNI task, each grayscale MRI slice is resized and padded to **224 x 224**, then replicated into three identical channels so that the pretrained ImageNet stem can be reused. After the final ConvNeXt stage, global average pooling and normalization produce a compact feature representation. The original ImageNet classification head is replaced by a **768 -> 2** linear layer producing raw NC/AD logits.
 
 ![ConvNeXt-Tiny adaptation for ADNI classification](figures/convnext_architecture.png)
 
 | ConvNeXt component | Working principle | Role in this ADNI pipeline |
 |---|---|---|
-| Input adaptation | Grayscale slice ? 3 replicated channels, 224 ? 224 | Matches the pretrained TorchVision input interface |
+| Input adaptation | Grayscale slice -> 3 replicated channels, 224 x 224 | Matches the pretrained TorchVision input interface |
 | Stem / downsampling | Strided convolutions progressively reduce spatial resolution | Builds a hierarchical representation while controlling computation |
-| ConvNeXt block | 7 ? 7 depthwise spatial mixing + LayerNorm + pointwise channel mixing + GELU + residual connection | Combines spatial and channel information efficiently |
+| ConvNeXt block | 7 x 7 depthwise spatial mixing + LayerNorm + pointwise channel mixing + GELU + residual connection | Combines spatial and channel information efficiently |
 | Four stages | Depths [3, 3, 9, 3], widths [96, 192, 384, 768] | Progresses from lower-level appearance cues to broader structural features |
-| Classification head | Global average pooling + normalization + 768 ? 2 linear layer | Produces raw NC/AD logits |
+| Classification head | Global average pooling + normalization + 768 -> 2 linear layer | Produces raw NC/AD logits |
 
-The baseline and ConvNeXt both output logits `[batch, 2]`. The loss is `CrossEntropyLoss` on unnormalized logits; softmax is applied only when probabilities are needed for evaluation. ConvNeXt's substantially greater representational capacity can improve recognition, but that capacity may also amplify shortcut features or produce sharply confident mistakes. This motivates the calibration and failure analysis in Sections 7?8.
+The baseline and ConvNeXt both output logits `[batch, 2]`. The loss is `CrossEntropyLoss` on unnormalized logits; softmax is applied only when probabilities are needed for evaluation. ConvNeXt's substantially greater representational capacity can improve recognition, but that capacity may also amplify shortcut features or produce sharply confident mistakes. This motivates the calibration and failure analysis in Sections 7-8.
 
 ### 4.3 Experimental settings and checkpoint policy
 
@@ -222,9 +222,9 @@ A model input is one preprocessed MRI slice represented as a tensor of shape `[3
 
 | Stage | Example |
 |---|---|
-| Preprocessed input | One grayscale MRI slice ? tensor `[3, 224, 224]` |
+| Preprocessed input | One grayscale MRI slice -> tensor `[3, 224, 224]` |
 | Slice ground truth | NC |
-| Slice output | `P(AD) = 0.50146` ? predicted AD, confidence 0.50146 |
+| Slice output | `P(AD) = 0.50146` -> predicted AD, confidence 0.50146 |
 | Patient aggregation | Mean `P(AD) = 0.0978` across that patient's slices |
 | Patient output | Predicted NC, confidence 0.9022 |
 | Review rule at 0.90 | Patient classification provisionally accepted |
@@ -290,7 +290,7 @@ These intervals quantify sampling uncertainty within the 102-patient held-out te
 
 #### 6.2.2 Paired comparison of ConvNeXt and the baseline
 
-Because both models were evaluated on the **same 102 patients**, model differences were also analysed using a **paired stratified patient bootstrap**. Each bootstrap replicate sampled the same patient IDs for both models while preserving the observed NC/AD composition. The reported difference is `ConvNeXt ? Baseline`.
+Because both models were evaluated on the **same 102 patients**, model differences were also analysed using a **paired stratified patient bootstrap**. Each bootstrap replicate sampled the same patient IDs for both models while preserving the observed NC/AD composition. The reported difference is `ConvNeXt - Baseline`.
 
 | Metric difference | Point difference | 95% paired bootstrap CI |
 |---|---:|---:|
@@ -343,31 +343,31 @@ ConvNeXt would send fewer cases to review at a similar observed accepted-case ac
 
 ## 8. Failure case autopsy: five actual test-set slice errors
 
-Five errors were chosen deterministically by the evaluation script: two high-confidence **AD ? NC** (false negatives), two high-confidence **NC ? AD** (false positives), and one low-confidence/borderline incorrect slice. They correspond to **five distinct patients**. The table checks whether each slice error persists after patient-level aggregation. Individual patient identifiers and original MRI pictures are intentionally excluded from this public README pending data-governance review.
+Five errors were chosen deterministically by the evaluation script: two high-confidence **AD -> NC** (false negatives), two high-confidence **NC -> AD** (false positives), and one low-confidence/borderline incorrect slice. They correspond to **five distinct patients**. The table checks whether each slice error persists after patient-level aggregation. Individual patient identifiers and original MRI pictures are intentionally excluded from this public README pending data-governance review.
 
-| Case | True ? predicted slice | Slice confidence | Patient-level result | Patient `P(AD)` | Patient confidence | Review at 0.90 |
+| Case | True -> predicted slice | Slice confidence | Patient-level result | Patient `P(AD)` | Patient confidence | Review at 0.90 |
 |---|---|---:|---|---:|---:|---|
-| 1 | AD ? NC | 0.99985 | **Wrong: AD ? NC** | 0.3712 | 0.6288 | Referred |
-| 2 | AD ? NC | 0.99969 | **Correct: AD ? AD** | 0.7259 | 0.7259 | Referred |
-| 3 | NC ? AD | 0.99997 | **Wrong: NC ? AD** | 0.9886 | 0.9886 | **Wrongly accepted** |
-| 4 | NC ? AD | 0.99995 | **Wrong: NC ? AD** | 0.8284 | 0.8284 | Referred |
-| 5 | NC ? AD | 0.50146 | **Correct: NC ? NC** | 0.0978 | 0.9022 | Correctly accepted |
+| 1 | AD -> NC | 0.99985 | **Wrong: AD -> NC** | 0.3712 | 0.6288 | Referred |
+| 2 | AD -> NC | 0.99969 | **Correct: AD -> AD** | 0.7259 | 0.7259 | Referred |
+| 3 | NC -> AD | 0.99997 | **Wrong: NC -> AD** | 0.9886 | 0.9886 | **Wrongly accepted** |
+| 4 | NC -> AD | 0.99995 | **Wrong: NC -> AD** | 0.8284 | 0.8284 | Referred |
+| 5 | NC -> AD | 0.50146 | **Correct: NC -> NC** | 0.0978 | 0.9022 | Correctly accepted |
 
 ### 8.1 Engineering autopsy of the five cases
 
-**Case 1 ? high-confidence false negative that persists at patient level.**
+**Case 1 - high-confidence false negative that persists at patient level.**
 **Observation:** an AD slice was predicted NC with confidence **0.99985**. **Evidence:** patient aggregation also remained wrong, with patient `P(AD) = 0.3712` and confidence 0.6288. **Plausible trigger:** slice-position, acquisition, contrast or anatomical-sampling variation may have shifted the observed appearance toward features learned for NC; the available evidence does not establish a causal anatomical explanation. **Operational consequence:** the slice confidence is dangerously misleading, although the patient-level 0.90 rule would still refer this patient because aggregate confidence is low. **Mitigation:** preserve patient/scan aggregation, investigate performance by slice position and scan type, and use validation-only calibration or attribution analysis before relying on confidence.
 
-**Case 2 ? high-confidence false negative corrected by aggregation.**
+**Case 2 - high-confidence false negative corrected by aggregation.**
 **Observation:** an AD slice was predicted NC with confidence **0.99969**. **Evidence:** averaging across the patient's other slices reversed the decision to AD with `P(AD) = 0.7259`; the patient remains below the 0.90 automation threshold and would be referred. **Plausible trigger:** an individual slice may omit or under-represent discriminative anatomy even when the broader scan contains sufficient evidence. **Operational consequence:** single-slice predictions should not be treated as independent clinical cases. **Mitigation:** prefer scan/patient aggregation and quantify which slice positions contribute the most reliable evidence.
 
-**Case 3 ? high-confidence false positive that defeats the review threshold.**
+**Case 3 - high-confidence false positive that defeats the review threshold.**
 **Observation:** an NC slice was predicted AD with confidence **0.99997**. **Evidence:** the patient was also predicted AD with `P(AD) = 0.9886`, so the fixed 0.90 rule would **wrongly accept** the error. **Plausible trigger:** texture, scanner/acquisition characteristics or anatomical sampling may act as shortcuts correlated with AD in the training data, although this remains a hypothesis. **Operational consequence:** confidence thresholding alone cannot guarantee safe triage because some errors remain confidently wrong after aggregation. **Mitigation:** investigate class-conditional calibration, out-of-distribution checks and feature attribution, and retain human review for deployment-sensitive decisions until external validation is available.
 
-**Case 4 ? high-confidence slice false positive caught by patient-level review.**
+**Case 4 - high-confidence slice false positive caught by patient-level review.**
 **Observation:** an NC slice was predicted AD with confidence **0.99995**. **Evidence:** the patient-level score was less extreme (`P(AD) = 0.8284`), so the 0.90 rule would refer the case. **Plausible trigger:** the same shortcut or slice-coverage hypotheses as Case 3 are possible, but aggregation weakens the spurious evidence. **Operational consequence:** patient-level aggregation improves robustness but does not eliminate errors. **Mitigation:** retain aggregation and analyse whether specific scans or slice ranges disproportionately drive false positives.
 
-**Case 5 ? borderline slice error corrected by a confident patient aggregate.**
+**Case 5 - borderline slice error corrected by a confident patient aggregate.**
 **Observation:** an NC slice fell just across the decision boundary with `P(AD) = 0.50146`. **Evidence:** the patient's aggregate was `P(AD) = 0.0978`, correctly predicting NC with confidence 0.9022. **Plausible trigger:** the slice itself is ambiguous to the trained classifier rather than representing a clear high-confidence failure. **Operational consequence:** a hard 0.5 slice threshold can produce unstable decisions near the boundary. **Mitigation:** use patient-level aggregation and preserve continuous probabilities rather than interpreting a single binary slice decision in isolation.
 
 **What can and cannot be concluded:** the selected cases exhibit differences in anatomical coverage, brightness and local shape, but these experiments do not prove which visual cues caused an individual error. The autopsy therefore separates **observed prediction behaviour** from **hypotheses about failure triggers**. Controlled follow-up should examine per-scan aggregation, slice-position stratification, scanner/site robustness, temperature scaling and Grad-CAM/feature attribution before stronger causal claims are made.
@@ -401,21 +401,21 @@ ConvNeXt offers better recognition and higher patient-level review coverage, but
 
 ```text
 recognition/ConvNeXt_s4983318/
-??? README.md                # Technical report and reproducibility
-??? modules.py               # CNN components and TorchVision ConvNeXt builder
-??? dataset.py               # Audit, patient-level split, Dataset and DataLoader
-??? train.py                 # Training, early stopping, logging and weights
-??? predict.py               # Evaluation, confidence and error analysis
-??? test_dataset.py          # DataLoader smoke test
-??? test_models.py           # Baseline forward/backward smoke test
-??? test_convnext.py         # ConvNeXt forward/backward smoke test
-??? figures/
-    ??? workflow.png
-    ??? convnext_architecture.png
-    ??? training_loss.png
-    ??? test_performance.png
-    ??? calibration_comparison.png
-    ??? paired_bootstrap_delta.png
+|-- README.md                # Technical report and reproducibility
+|-- modules.py               # CNN components and TorchVision ConvNeXt builder
+|-- dataset.py               # Audit, patient-level split, Dataset and DataLoader
+|-- train.py                 # Training, early stopping, logging and weights
+|-- predict.py               # Evaluation, confidence and error analysis
+|-- test_dataset.py          # DataLoader smoke test
+|-- test_models.py           # Baseline forward/backward smoke test
+|-- test_convnext.py         # ConvNeXt forward/backward smoke test
+`-- figures/
+    |-- workflow.png
+    |-- convnext_architecture.png
+    |-- training_loss.png
+    |-- test_performance.png
+    |-- calibration_comparison.png
+    `-- paired_bootstrap_delta.png
 ```
 
 The following administrative steps must be completed before the final course submission:
