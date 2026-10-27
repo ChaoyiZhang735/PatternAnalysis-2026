@@ -348,7 +348,18 @@ Despite making **154 fewer slice-level errors**, ConvNeXt made **403 errors at â
 
 ### 7.1 Locked patient-level review policy
 
-Using **validation-set** results, we selected the same **illustrative threshold of 0.90** for both models:
+A shared confidence threshold of **0.90** was selected using **validation data only** and then locked before held-out test reporting. We evaluated the same candidate thresholds for both models and used the following operating criterion: **accepted-case accuracy >= 95% with zero accepted AD-to-NC false negatives**. The baseline first met both conditions at 0.80, whereas ConvNeXt first met both at 0.90. Therefore, 0.90 was the **lowest common threshold** satisfying the same review criterion for both models.
+
+| Validation operating point | Baseline CNN | ConvNeXt-Tiny |
+|---|---:|---:|
+| Accepted-case accuracy at 0.80 | 95.35% | 93.85% |
+| AD-to-NC false negatives at 0.80 | 0 | 1 |
+| Coverage at 0.80 | 42.16% | 63.73% |
+| Accepted-case accuracy at 0.90 | **100.0%** | **96.55%** |
+| AD-to-NC false negatives at 0.90 | **0** | **0** |
+| Coverage at 0.90 | 27.45% | **56.86%** |
+
+The resulting locked review policy was:
 
 1. Aggregate a patient's slice-level probabilities: `p_AD = mean(P(AD) over slices)`.
 2. Predict `AD` if `p_AD â‰¥ 0.5`, else `NC`.
