@@ -216,7 +216,17 @@ The final evaluation script requires an explicit `--confirm-test` to reduce acci
 
 Outputs include `evaluation.json`, `slice_predictions.csv`, `patient_predictions.csv`, confidence/review plots, `failure_cases.csv` and an illustrative `failure_examples.png`. Generated patient/slice prediction tables and original MRI images must **not** be committed to public GitHub. The analytic plots included in this README use aggregated statistics only.
 
-### 5.5 Example inference record without patient-identifying content
+### 5.5 Reproduce the patient-level bootstrap uncertainty analysis
+
+The patient-level confidence intervals and paired model comparison reported in Section 6.2 can be reproduced from the saved final patient_predictions.csv files without retraining either model.
+
+Run bootstrap_analysis.py with the saved baseline and ConvNeXt patient_predictions.csv files using 10,000 stratified patient-level bootstrap replicates and seed 42.
+
+The script produces bootstrap_summary.json, patient_metric_ci.csv, paired_metric_delta.csv, and paired_bootstrap_delta.png.
+
+The implementation can be regression-tested with test_bootstrap.py, which verifies the 102-patient composition, recorded point estimates, single-model 95% confidence intervals, and paired ConvNeXt-minus-baseline differences.
+
+### 5.6 Example inference record without patient-identifying content
 
 A model input is one preprocessed MRI slice represented as a tensor of shape `[3, 224, 224]`; the three channels are replicated copies of the same grayscale slice. The model outputs two logits, which are converted to `P(NC)` and `P(AD)` only for evaluation. To avoid publishing patient identifiers or source MRI pixels, the example below uses the numerical output from Failure Case 5.
 
@@ -406,9 +416,11 @@ recognition/ConvNeXt_s4983318/
 |-- dataset.py               # Audit, patient-level split, Dataset and DataLoader
 |-- train.py                 # Training, early stopping, logging and weights
 |-- predict.py               # Evaluation, confidence and error analysis
+|-- bootstrap_analysis.py    # Reproducible patient-level bootstrap analysis
 |-- test_dataset.py          # DataLoader smoke test
 |-- test_models.py           # Baseline forward/backward smoke test
 |-- test_convnext.py         # ConvNeXt forward/backward smoke test
+|-- test_bootstrap.py        # Bootstrap regression verification
 `-- figures/
     |-- workflow.png
     |-- convnext_architecture.png
