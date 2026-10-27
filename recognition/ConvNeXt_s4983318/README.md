@@ -222,9 +222,24 @@ The patient-level confidence intervals and paired model comparison reported in S
 
 Run bootstrap_analysis.py with the saved baseline and ConvNeXt patient_predictions.csv files using 10,000 stratified patient-level bootstrap replicates and seed 42.
 
+```powershell
+& $py .\bootstrap_analysis.py `
+  --baseline-predictions $runs\eval_baseline_test_seed42\patient_predictions.csv `
+  --convnext-predictions $runs\eval_convnext_test_seed42\patient_predictions.csv `
+  --output-dir $runs\bootstrap_repro_seed42 `
+  --replicates 10000 `
+  --seed 42
+```
+
 The script produces bootstrap_summary.json, patient_metric_ci.csv, paired_metric_delta.csv, and paired_bootstrap_delta.png.
 
 The implementation can be regression-tested with test_bootstrap.py, which verifies the 102-patient composition, recorded point estimates, single-model 95% confidence intervals, and paired ConvNeXt-minus-baseline differences.
+
+```powershell
+& $py .\test_bootstrap.py `
+  --baseline-predictions $runs\eval_baseline_test_seed42\patient_predictions.csv `
+  --convnext-predictions $runs\eval_convnext_test_seed42\patient_predictions.csv
+```
 
 ### 5.6 Example inference record without patient-identifying content
 
